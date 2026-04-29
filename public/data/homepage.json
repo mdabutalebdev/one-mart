@@ -1,0 +1,211 @@
+{
+  "announcement": {
+    "text": "FREE WORLDWIDE SHIPPING ON ALL ORDERS OVER $100",
+    "link": "/shipping-policy"
+  },
+  "hero": [
+    {
+      "title": "Timeless Elegance",
+      "subtitle": "Our newest collection is here",
+      "image": "https://images.pexels.com/photos/28673899/pexels-photo-28673899.jpeg",
+      "cta": [
+        { "label": "Shop Mens", "link": "/mens" },
+        { "label": "Shop Womens", "link": "/womens" }
+      ]
+    },
+    {
+      "title": "Legacy Slim Auto",
+      "subtitle": "Up to 50% Off Sitewide*",
+      "image": "https://images.pexels.com/photos/380782/pexels-photo-380782.jpeg",
+      "cta": [
+        { "label": "SHOP NOW", "link": "/shop" }
+      ]
+    },
+    {
+      "title": "Chrono Collection",
+      "subtitle": "Precision meets style",
+      "image": "https://images.pexels.com/photos/2113994/pexels-photo-2113994.jpeg",
+      "cta": [
+        { "label": "Shop Chrono", "link": "/chrono" }
+      ]
+    }
+  ],
+  "categories": [
+    {
+      "image": "https://images.pexels.com/photos/1036622/pexels-photo-1036622.jpeg",
+      "title": "Sunnies by MVMT",
+      "subtitle": "Up to 50% Off Sitewide*",
+      "buttons": [
+        { "label": "SHOP NOW", "link": "/sunglasses" }
+      ]
+    },
+    {
+      "image": "https://images.pexels.com/photos/1036623/pexels-photo-1036623.jpeg",
+      "title": "Mother's Day Gift Guide",
+      "subtitle": "Up to 50% Off Sitewide*",
+      "buttons": [
+        { "label": "SHOP NOW", "link": "/gifts" }
+      ]
+    },
+    {
+      "image": "https://images.pexels.com/photos/1036627/pexels-photo-1036627.jpeg",
+      "title": "Women's Watches",
+      "subtitle": "Up to 50% Off Sitewide*",
+      "buttons": [
+        { "label": "SHOP NOW", "link": "/womens" },
+        { "label": "LEARN MORE", "link": "/womens/learn" }
+      ]
+    }
+  ],
+  "shopByCategory": [
+    {
+      "title": "Watches",
+      "subtitle": "",
+      "image": "https://images.pexels.com/photos/280250/pexels-photo-280250.jpeg",
+      "link": "/watches",
+      "colSpan": 4
+    },
+    {
+      "title": "Sunglasses",
+      "subtitle": "",
+      "image": "https://images.pexels.com/photos/1362558/pexels-photo-1362558.jpeg",
+      "link": "/sunglasses",
+      "colSpan": 2
+    },
+    {
+      "title": "Bracelets",
+      "subtitle": "Flash Sale: 50% Off*",
+      "image": "https://images.pexels.com/photos/1191531/pexels-photo-1191531.jpeg",
+      "link": "/bracelets",
+      "colSpan": 3
+    },
+    {
+      "title": "Necklaces",
+      "subtitle": "Flash Sale: 50% Off*",
+      "image": "https://images.pexels.com/photos/8386654/pexels-photo-8386654.jpeg",
+      "link": "/necklaces",
+      "colSpan": 3
+    }
+  ],
+  "featuredStories": {
+    "title": "Featured Stories",
+    "subtitle": "Get up to date in the world of MVMT",
+    "stories": [
+      {
+        "title": "MVMT x Jett Lawrence",
+        "video": "LXb3EKWsInQ",
+        "link": "/story-1"
+      },
+      {
+        "title": "SS25 Women's Watches",
+        "video": "aqz-KE-bpKQ",
+        "link": "/story-2"
+      },
+      {
+        "title": "Life Through a Fresh Lens",
+        "video": "EngW7tLk6R8",
+        "link": "/story-3"
+      },
+      {
+        "title": "Sport Active",
+        "video": "ysz5S6PUM-U",
+        "link": "/story-4"
+      },
+      {
+        "title": "Go Automatic",
+        "video": "tO01J-M3g0U",
+        "link": "/story-5"
+      },
+      {
+        "title": "New Collection",
+        "video": "2LqzF5WauAw",
+        "link": "/story-6"
+      },
+      {
+        "title": "Behind the Scenes",
+        "video": "ScMzIvxBSi4",
+        "link": "/story-7"
+      },
+      {
+        "title": "Summer Vibes",
+        "video": "J---aiyznGQ",
+        "link": "/story-8"
+      },
+      {
+        "title": "Classic Styles",
+        "video": "dFlDRhvM4L0",
+        "link": "/story-9"
+      },
+      {
+        "title": "Limited Edition",
+        "video": "ysz5S6PUM-U",
+        "link": "/story-10"
+      }
+    ]
+  },
+  "bestSellers": {
+    "title": "BEST SELLERS",
+    "products": [
+      {
+        "id": "1",
+        "name": "CHRONO II | 45MM",
+        "subtitle": "Pacific Navy",
+        "price": 36473,
+        "image": "https://images.pexels.com/photos/28673901/pexels-photo-28673901.jpeg",
+        "category": "Mens",
+        "swatches": ["#2b3a55", "#e5e4e2", "#8b4513"],
+        "extraSwatches": 7,
+        "inStock": true
+      },
+      {
+        "id": "2",
+        "name": "LEGACY SLIM",
+        "subtitle": "Silver Luxe",
+        "price": 42072,
+        "image": "https://images.pexels.com/photos/31050000/pexels-photo-31050000.jpeg",
+        "category": "Womens",
+        "swatches": ["#E5E4E2", "#FFD700"],
+        "extraSwatches": 0,
+        "inStock": false
+      },
+      {
+        "id": "3",
+        "name": "VINTAGE GOLD | 40MM",
+        "subtitle": "Matte Black",
+        "price": 28500,
+        "image": "https://images.pexels.com/photos/31049998/pexels-photo-31049998.jpeg",
+        "category": "Mens",
+        "swatches": ["#000000", "#FFD700", "#cccccc"],
+        "extraSwatches": 2,
+        "inStock": true
+      },
+      {
+        "id": "4",
+        "name": "ELEGANT YELLOW",
+        "subtitle": "Gold Mesh",
+        "price": 15600,
+        "image": "https://images.pexels.com/photos/29301897/pexels-photo-29301897.jpeg",
+        "category": "Womens",
+        "swatches": ["#FFD700", "#E5E4E2"],
+        "extraSwatches": 0,
+        "inStock": true
+      }
+    ]
+  },
+  "banners": [
+    {
+      "title": "LIFESTYLE COLLECTION",
+      "subtitle": "DESIGNED FOR THE MODERN ADVENTURER",
+      "image": "https://images.pexels.com/photos/1751599/pexels-photo-1751599.jpeg",
+      "cta": "EXPLORE NOW",
+      "link": "/lifestyle"
+    },
+    {
+      "title": "GOLDEN HOUR",
+      "subtitle": "ELEVATE YOUR STYLE",
+      "image": "https://images.pexels.com/photos/5058219/pexels-photo-5058219.jpeg",
+      "cta": "SHOP GOLD",
+      "link": "/gold-collection"
+    }
+  ]
+}

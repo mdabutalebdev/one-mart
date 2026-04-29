@@ -2,25 +2,62 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --background-alt: #F0EFEA;
+  --foreground: #000000;
+  --accent: #E32B2B;
+  --muted: #757575;
+  --border: #e5e5e5;
+  
+  --font-roboto: var(--font-roboto);
+  --font-montserrat: var(--font-montserrat);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-background-alt: var(--background-alt);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+
+  --font-roboto: var(--font-roboto);
+  --font-montserrat: var(--font-montserrat);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-roboto), sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-montserrat), sans-serif;
+    @apply font-bold tracking-tight;
+  }
+
+  .font-montserrat {
+    font-family: var(--font-montserrat), sans-serif;
+  }
+
+  .font-roboto {
+    font-family: var(--font-roboto), sans-serif;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .btn-pill {
+    @apply inline-flex items-center justify-center px-8 py-3 rounded-full font-montserrat font-bold text-xs tracking-widest uppercase transition-all duration-300;
+  }
+  
+  .btn-black {
+    @apply bg-black text-white hover:bg-zinc-800;
+  }
+
+  .btn-white {
+    @apply bg-white text-black hover:bg-zinc-100;
+  }
+
+  .section-padding {
+    @apply py-12 md:py-20 px-4 md:px-8 max-w-7xl mx-auto;
+  }
 }
