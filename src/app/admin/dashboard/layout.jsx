@@ -6,11 +6,13 @@ import { useEffect, useState } from 'react'
 import AdminHeader from "@/components/Admin/AdminHeader";
 import AdminSidebar from "@/components/Admin/AdminSidebar/AdminSidebar";
 
+import { useSelector } from 'react-redux'
+import { selectCurrentUser, selectIsAuthenticated } from '@/redux/api/authSlice'
+
 export default function RootLayout({ children }) {
-   // const { user, isAuthenticated, loading } = useAppContext()
-   const user = {role: 'admin'}
-   const isAuthenticated = true;
-   const loading = false;
+    const user = useSelector(selectCurrentUser)
+    const isAuthenticated = useSelector(selectIsAuthenticated)
+    const { loading } = useSelector(state => state.auth)
     const router = useRouter();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 

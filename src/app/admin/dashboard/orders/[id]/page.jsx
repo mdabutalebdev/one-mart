@@ -36,11 +36,13 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatDateForTable } from '@/utils/formatDate';
-import { orderAPI } from '@/services/api';
-import OrderUpdateHistory from '@/components/Admin/OrderUpdateHistory';
 import PermissionDenied from '@/components/Common/PermissionDenied';
 import { useAppContext } from '@/context/AppContext';
-import { getCookie } from 'cookies-next';
+import OrderUpdateHistory from '@/components/Admin/OrderUpdateHistory';
+import { 
+    useGetAdminOrderDetailsQuery, 
+    useUpdateOrderStatusMutation 
+} from '@/redux/api/ordersApi';
 
 export default function OrderDetailsPage() {
     const params = useParams();
@@ -48,12 +50,22 @@ export default function OrderDetailsPage() {
     const orderId = params.id;
     const { hasPermission, loading: contextLoading } = useAppContext();
 
-    const [order, setOrder] = useState(null);
-    const [loading, setLoading] = useState(true);
+    // RTK Query hooks
+    const { 
+        data: orderResponse, 
+        isLoading: orderLoading, 
+        isError,
+        refetch 
+    } = useGetAdminOrderDetailsQuery(orderId, {
+        skip: !orderId || contextLoading || !hasPermission('order', 'read')
+    });
+    
+    const [updateStatus, { isLoading: updatingStatus }] = useUpdateOrderStatusMutation();
+
+    const order = orderResponse?.data;
     const [permissionError, setPermissionError] = useState(null);
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [newStatus, setNewStatus] = useState('');
-    const [updatingStatus, setUpdatingStatus] = useState(false);
     const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
     const [returnQuantities, setReturnQuantities] = useState({});
     const [selectedItems, setSelectedItems] = useState(new Set());
@@ -61,89 +73,15 @@ export default function OrderDetailsPage() {
     const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
 
     useEffect(() => {
-        // Check permission first
-        if (!contextLoading) {
-            if (!hasPermission('order', 'read')) {
-                setPermissionError({
-                    message: "You don't have permission to view order details.",
-                    action: 'Read Orders'
-                });
-                setLoading(false);
-            } else {
-                fetchOrderDetails();
-            }
+        if (!contextLoading && !hasPermission('order', 'read')) {
+            setPermissionError({
+                message: "You don't have permission to view order details.",
+                action: 'Read Orders'
+            });
         }
-    }, [contextLoading, hasPermission, orderId]);
+    }, [contextLoading, hasPermission]);
 
-    // Load selected items from localStorage when order loads
-    useEffect(() => {
-        if (order && order._id) {
-            const savedSelections = localStorage.getItem(`order_selections_${order._id}`);
-            if (savedSelections) {
-                try {
-                    const parsed = JSON.parse(savedSelections);
-                    setSelectedItems(new Set(parsed));
-                } catch (e) {
-                    console.error('Error loading saved selections:', e);
-                }
-            }
-        }
-    }, [order?._id]);
-
-    // Save selected items to localStorage
-    useEffect(() => {
-        if (order && order._id) {
-            if (selectedItems.size > 0) {
-                localStorage.setItem(`order_selections_${order._id}`, JSON.stringify(Array.from(selectedItems)));
-            } else {
-                // Clear localStorage if no items selected
-                localStorage.removeItem(`order_selections_${order._id}`);
-            }
-        }
-    }, [selectedItems, order?._id]);
-
-    const fetchOrderDetails = async () => {
-        try {
-            setLoading(true);
-            const token = getCookie('token');
-            const data = await orderAPI.getAdminOrderDetails(orderId, token);
-
-            if (data.success) {
-                setOrder(data.data);
-                setPermissionError(null);
-            } else {
-                // Check if it's a permission error
-                if (data.message && (
-                    data.message.toLowerCase().includes('permission') ||
-                    data.message.toLowerCase().includes('access denied') ||
-                    data.message.toLowerCase().includes("don't have permission")
-                )) {
-                    setPermissionError({
-                        message: data.message,
-                        action: 'Read Orders'
-                    });
-                } else {
-                    toast.error('Failed to fetch order details');
-                    router.push('/admin/dashboard/orders');
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching order details:', error);
-            // Check if it's a 403 error (permission denied)
-            if (error.status === 403 || error.response?.status === 403) {
-                const errorMessage = error.response?.data?.message || error.message || 'You don\'t have permission to access this resource.';
-                setPermissionError({
-                    message: errorMessage,
-                    action: 'Read Orders'
-                });
-            } else {
-                toast.error('Error fetching order details');
-                router.push('/admin/dashboard/orders');
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
+    const loading = orderLoading || contextLoading;
 
     const getStatusColor = (status) => {
         switch (status) {
@@ -331,33 +269,21 @@ export default function OrderDetailsPage() {
         }
 
         try {
-            setUpdatingStatus(true);
-            const token = getCookie('token');
-            const response = await orderAPI.updateOrderStatus(order._id, { status: newStatus }, token);
+            const response = await updateStatus({ id: order._id, status: newStatus }).unwrap();
             
             if (response.success) {
                 toast.success('Order status updated successfully');
-                // Update order with full response data (includes paymentStatus if updated)
-                const updatedOrder = response.data || { ...order, status: newStatus };
-                setOrder({ ...order, ...updatedOrder });
                 closeStatusModal();
             } else {
                 toast.error(response.message || 'Failed to update order status');
             }
         } catch (error) {
             console.error('Error updating order status:', error);
-            if (error.status === 403 || error.response?.status === 403) {
-                toast.error("You don't have permission to update orders");
-            } else {
-                toast.error('Error updating order status');
-            }
-        } finally {
-            setUpdatingStatus(false);
+            toast.error('Error updating order status');
         }
     };
 
     const handleReturnSubmit = async () => {
-        // Check if any items are being returned
         const hasReturns = Object.values(returnQuantities).some(qty => qty > 0);
         if (!hasReturns) {
             toast.error('Please specify return quantities for at least one item');
@@ -365,10 +291,8 @@ export default function OrderDetailsPage() {
         }
 
         try {
-            setUpdatingStatus(true);
-            
-            // Prepare return data
-            const returnData = {
+            const response = await updateStatus({ 
+                id: order._id, 
                 status: 'returned',
                 returnQuantities: Object.entries(returnQuantities)
                     .filter(([index, qty]) => qty > 0)
@@ -376,13 +300,10 @@ export default function OrderDetailsPage() {
                         itemIndex: parseInt(index),
                         quantity: qty
                     }))
-            };
-
-            const response = await orderAPI.updateOrderStatus(order._id, returnData);
+            }).unwrap();
             
             if (response.success) {
                 toast.success('Order returned successfully');
-                setOrder({ ...order, status: 'returned' });
                 closeReturnModal();
             } else {
                 toast.error(response.message || 'Failed to return order');
@@ -390,8 +311,6 @@ export default function OrderDetailsPage() {
         } catch (error) {
             console.error('Error returning order:', error);
             toast.error('Error returning order');
-        } finally {
-            setUpdatingStatus(false);
         }
     };
 
@@ -469,9 +388,9 @@ export default function OrderDetailsPage() {
                         </div>
                         
                         <div className="flex items-center space-x-3">
-                            <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${getStatusColor(order.status)}`}>
-                                {getStatusIcon(order.status)}
-                                <span className="ml-2">{order.status.charAt(0).toUpperCase() + order.status.slice(1)}</span>
+                            <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${getStatusColor(order?.status)}`}>
+                                {getStatusIcon(order?.status)}
+                                <span className="ml-2">{(order?.status?.charAt(0)?.toUpperCase() + order?.status?.slice(1)) || 'N/A'}</span>
                             </span>
                             <div className="flex items-center space-x-2">
                                 {hasPermission('order', 'update') && (
@@ -563,12 +482,11 @@ export default function OrderDetailsPage() {
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                         <div className="flex items-center">
                             <div className="p-3 bg-purple-100 rounded-xl">
-                                {getStatusIcon(order.status)}
-                                <div className="text-purple-600">{getStatusIcon(order.status)}</div>
+                                <div className="text-purple-600">{getStatusIcon(order?.status)}</div>
                             </div>
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-slate-600">Status</p>
-                                <p className="text-lg font-bold text-slate-900 capitalize">{order.status}</p>
+                                <p className="text-lg font-bold text-slate-900 capitalize">{order?.status || 'N/A'}</p>
                             </div>
                         </div>
                     </div>
@@ -1129,8 +1047,8 @@ export default function OrderDetailsPage() {
                             </p>
                             
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Current Status: <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                Current Status: <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order?.status)}`}>
+                                    {(order?.status?.charAt(0)?.toUpperCase() + order?.status?.slice(1)) || 'N/A'}
                                 </span>
                             </label>
 
@@ -1142,12 +1060,12 @@ export default function OrderDetailsPage() {
                                 onChange={(e) => setNewStatus(e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                             >
-                                <option value={order.status}>
-                                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)} (Current)
+                                <option value={order?.status}>
+                                    {(order?.status?.charAt(0)?.toUpperCase() + order?.status?.slice(1)) || 'N/A'} (Current)
                                 </option>
-                                {getAvailableStatusOptions(order.status).map(status => (
+                                {getAvailableStatusOptions(order?.status).map(status => (
                                     <option key={status} value={status}>
-                                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                                        {(status?.charAt(0).toUpperCase() + status?.slice(1)) || status}
                                     </option>
                                 ))}
                             </select>

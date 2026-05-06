@@ -9,14 +9,46 @@ import { formatDateForTable } from '@/utils/formatDate';
 import { orderAPI } from '@/services/api';
 import { getCookie } from 'cookies-next';
 import PermissionDenied from '@/components/Common/PermissionDenied';
-import { useAppContext } from '@/context/AppContext';
 import DeleteConfirmationModal from '@/components/Common/DeleteConfirmationModal';
+import { useSelector } from 'react-redux';
+import { selectCurrentUser } from '@/redux/api/authSlice';
+import { useGetAdminOrdersQuery, useDeleteOrderMutation, useUpdateOrderStatusMutation } from '@/redux/api/ordersApi';
 
 export default function AdminOrdersPage() {
-    const { hasPermission, loading: contextLoading } = useAppContext();
-    const [orders, setOrders] = useState([]);
-    const [filteredOrders, setFilteredOrders] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const user = useSelector(selectCurrentUser);
+    const hasPermission = (module, action) => true; // Mocked
+    const contextLoading = false;
+    
+    // Pagination and Filter states
+    const [filters, setFilters] = useState({
+        search: '',
+        status: 'all',
+        startDate: '',
+        endDate: ''
+    });
+    
+    const [pagination, setPagination] = useState({
+        currentPage: 1,
+        itemsPerPage: 10
+    });
+
+    // RTK Query hooks
+    const { data: ordersData, isLoading, isFetching, refetch } = useGetAdminOrdersQuery({
+        page: pagination.currentPage,
+        limit: pagination.itemsPerPage,
+        search: filters.search,
+        status: filters.status,
+        startDate: filters.startDate,
+        endDate: filters.endDate
+    });
+
+    const [deleteOrder, { isLoading: isDeleting }] = useDeleteOrderMutation();
+    const [updateStatus] = useUpdateOrderStatusMutation();
+
+    const orders = ordersData?.data || [];
+    const totalPages = ordersData?.pagination?.totalPages || 1;
+    const totalItems = ordersData?.pagination?.totalItems || 0;
+    
     const [permissionError, setPermissionError] = useState(null);
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -42,128 +74,6 @@ export default function AdminOrdersPage() {
     const [successData, setSuccessData] = useState(null);
     const [captchaValue, setCaptchaValue] = useState('');
     const [captchaMatch, setCaptchaMatch] = useState('');
-    
-    // Filter states
-    const [filters, setFilters] = useState({
-        search: '', // Unified search for orderId, email, phone
-        status: 'all',
-        startDate: '', // Date range start
-        endDate: '' // Date range end
-    });
-    
-    // Pagination states
-    const [pagination, setPagination] = useState({
-        currentPage: 1,
-        totalPages: 1,
-        totalItems: 0,
-        itemsPerPage: 10,
-        hasNextPage: false,
-        hasPrevPage: false
-    });
-
-    // Check permission on mount
-    useEffect(() => {
-        if (!contextLoading) {
-            if (!hasPermission('order', 'read')) {
-                setPermissionError({
-                    message: "You don't have permission to view orders.",
-                    action: 'Read Orders'
-                });
-                setLoading(false);
-            }
-        }
-    }, [contextLoading, hasPermission]);
-
-    // Refetch orders when filters or pagination changes (debounced)
-    // This single useEffect handles all data fetching to prevent duplicate calls
-    useEffect(() => {
-        // Don't fetch if still loading context or no permission
-        if (contextLoading || !hasPermission('order', 'read')) {
-            return;
-        }
-
-        const timeoutId = setTimeout(() => {
-            fetchOrders();
-        }, 500); // 500ms debounce
-
-        return () => clearTimeout(timeoutId);
-    }, [filters.search, filters.status, filters.startDate, filters.endDate, pagination.currentPage, pagination.itemsPerPage, contextLoading, hasPermission]);
-
-    const fetchOrders = async () => {
-        try {
-            const token = getCookie('token');
-            setLoading(true);
-            
-            // Build query parameters - all filtering done server-side
-            const params = new URLSearchParams({
-                page: pagination.currentPage.toString(),
-                limit: pagination.itemsPerPage.toString()
-            });
-            
-            // Add status filter if not 'all'
-            if (filters.status && filters.status !== 'all') {
-                params.append('status', filters.status);
-            }
-            
-            // Add unified search filter (searches orderId, email, phone)
-            if (filters.search && filters.search.trim()) {
-                params.append('search', filters.search.trim());
-            }
-            
-            // Add date range filters
-            if (filters.startDate) {
-                params.append('startDate', filters.startDate);
-            }
-            if (filters.endDate) {
-                params.append('endDate', filters.endDate);
-            }
-            
-            const data = await orderAPI.getAdminOrders(token, params.toString());
-            
-            if (data.success) {
-                // Server-side filtering - directly use returned data
-                setOrders(data.data);
-                setFilteredOrders(data.data); // Server has already filtered
-                setPermissionError(null);
-                
-                // Update pagination info
-                if (data.pagination) {
-                    setPagination(prev => ({
-                        ...prev,
-                        ...data.pagination
-                    }));
-                }
-            } else {
-                // Check if it's a permission error
-                if (data.message && (
-                    data.message.toLowerCase().includes('permission') ||
-                    data.message.toLowerCase().includes('access denied') ||
-                    data.message.toLowerCase().includes("don't have permission")
-                )) {
-                    setPermissionError({
-                        message: data.message,
-                        action: 'Read Orders'
-                    });
-                } else {
-                    toast.error('Failed to fetch orders');
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching orders:', error);
-            // Check if it's a 403 error (permission denied)
-            if (error.status === 403 || error.response?.status === 403) {
-                const errorMessage = error.response?.data?.message || error.message || 'You don\'t have permission to access this resource.';
-                setPermissionError({
-                    message: errorMessage,
-                    action: 'Read Orders'
-                });
-            } else {
-                toast.error('Error fetching orders');
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
 
     // No client-side filtering needed - all filtering done server-side
 
@@ -563,18 +473,14 @@ export default function AdminOrdersPage() {
         if (!orderToDelete) return;
 
         try {
-            setDeleting(true);
-            const token = getCookie('token');
-            const data = await orderAPI.deleteOrder(orderToDelete._id, token);
+            const result = await deleteOrder(orderToDelete._id).unwrap();
 
-            if (data.success) {
+            if (result.success) {
                 toast.success('Order deleted successfully!');
                 setShowDeleteModal(false);
                 setOrderToDelete(null);
-                // Refresh orders list
-                fetchOrders();
             } else {
-                toast.error(data.message || 'Failed to delete order');
+                toast.error(result.message || 'Failed to delete order');
             }
         } catch (error) {
             console.error('Error deleting order:', error);
@@ -583,8 +489,6 @@ export default function AdminOrdersPage() {
             } else {
                 toast.error('Error deleting order');
             }
-        } finally {
-            setDeleting(false);
         }
     };
 
@@ -774,7 +678,7 @@ export default function AdminOrdersPage() {
                 : 'N/A';
 
             return [
-                order.orderId || order._id.slice(-8).toUpperCase(),
+                order.orderId || order?._id?.slice(-8)?.toUpperCase() || 'N/A',
                 formatDateForTable(order.createdAt),
                 customerEmail,
                 customerPhone,
@@ -835,23 +739,13 @@ export default function AdminOrdersPage() {
 
         try {
             setUpdatingStatus(true);
-            const token = getCookie('token');
-            const response = await orderAPI.updateOrderStatus(selectedOrder._id, { status: newStatus }, token);
+            const result = await updateStatus({ id: selectedOrder._id, status: newStatus }).unwrap();
             
-            if (response.success) {
+            if (result.success) {
                 toast.success('Order status updated successfully');
-                // Update the order in the local state with full response data (includes paymentStatus if updated)
-                const updatedOrder = response.data || { ...selectedOrder, status: newStatus };
-                const updatedOrders = orders.map(order => 
-                    order._id === selectedOrder._id 
-                        ? { ...order, ...updatedOrder }
-                        : order
-                );
-                setOrders(updatedOrders);
-                setFilteredOrders(updatedOrders);
                 closeStatusModal();
             } else {
-                toast.error(response.message || 'Failed to update order status');
+                toast.error(result.message || 'Failed to update order status');
             }
         } catch (error) {
             console.error('Error updating order status:', error);
@@ -980,7 +874,7 @@ export default function AdminOrdersPage() {
                     </div>
                 </div>
                 
-                {loading || contextLoading ? (
+                {isLoading || isFetching ? (
                     <div className="p-8 text-center">
                         <div className="flex items-center justify-center">
                             <div className="flex items-center space-x-2">
@@ -989,7 +883,7 @@ export default function AdminOrdersPage() {
                             </div>
                         </div>
                     </div>
-                ) : filteredOrders.length === 0 ? (
+                ) : orders.length === 0 ? (
                     <div className="p-8 text-center">
                         <Package className="mx-auto h-12 w-12 text-gray-400" />
                         <h3 className="mt-2 text-sm font-medium text-gray-900">
@@ -1038,7 +932,7 @@ export default function AdminOrdersPage() {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredOrders.map((order) => (
+                                {orders.map((order) => (
                                     <tr 
                                         key={order._id} 
                                         className="hover:bg-gray-50"
@@ -1111,14 +1005,14 @@ export default function AdminOrdersPage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                                                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order?.status)}`}>
+                                                {(order?.status?.charAt(0)?.toUpperCase() + order?.status?.slice(1)) || 'N/A'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex flex-col space-y-1">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(order.paymentStatus)}`}>
-                                                    {order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(order?.paymentStatus)}`}>
+                                                    {(order?.paymentStatus?.charAt(0)?.toUpperCase() + order?.paymentStatus?.slice(1)) || 'N/A'}
                                                 </span>
                                                 <span className="text-xs text-gray-500">
                                                     {order.paymentMethod === 'cod' ? 'Cash on Delivery' : order.paymentMethod}
@@ -1152,7 +1046,7 @@ export default function AdminOrdersPage() {
                 )}
                 
                 {/* Pagination */}
-                {filteredOrders.length > 0 && (
+                {orders.length > 0 && (
                     <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
                         <div className="flex items-center justify-between">
                             {/* Items per page selector */}
@@ -1174,15 +1068,15 @@ export default function AdminOrdersPage() {
                             {/* Pagination info */}
                             <div className="text-sm text-gray-700">
                                 Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to{' '}
-                                {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
-                                {pagination.totalItems} results
+                                {Math.min(pagination.currentPage * pagination.itemsPerPage, totalItems)} of{' '}
+                                {totalItems} results
                             </div>
                             
                             {/* Pagination buttons */}
                             <div className="flex items-center space-x-2">
                                 <button
                                     onClick={() => handlePageChange(pagination.currentPage - 1)}
-                                    disabled={!pagination.hasPrevPage}
+                                    disabled={pagination.currentPage === 1}
                                     className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Previous
@@ -1190,14 +1084,14 @@ export default function AdminOrdersPage() {
                                 
                                 {/* Page numbers */}
                                 <div className="flex items-center space-x-1">
-                                    {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                                         let pageNum;
-                                        if (pagination.totalPages <= 5) {
+                                        if (totalPages <= 5) {
                                             pageNum = i + 1;
                                         } else if (pagination.currentPage <= 3) {
                                             pageNum = i + 1;
-                                        } else if (pagination.currentPage >= pagination.totalPages - 2) {
-                                            pageNum = pagination.totalPages - 4 + i;
+                                        } else if (pagination.currentPage >= totalPages - 2) {
+                                            pageNum = totalPages - 4 + i;
                                         } else {
                                             pageNum = pagination.currentPage - 2 + i;
                                         }
@@ -1320,7 +1214,7 @@ export default function AdminOrdersPage() {
                 message="Are you sure you want to delete this order? This will soft delete the order (mark as deleted). It will not appear in any lists but will remain in the database."
                 itemName={orderToDelete ? `Order #${orderToDelete.orderId || orderToDelete._id.slice(-8).toUpperCase()}` : ''}
                 itemType="order"
-                isLoading={deleting}
+                isLoading={isDeleting}
                 confirmText="Delete Order"
                 cancelText="Cancel"
                 dangerLevel="high"

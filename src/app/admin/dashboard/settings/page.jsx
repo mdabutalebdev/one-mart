@@ -10,6 +10,7 @@ import {
   Mail,
   Users,
   Truck,
+  Shield,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import PermissionDenied from '@/components/Common/PermissionDenied';
@@ -76,6 +77,22 @@ export default function AdminSettingsPage() {
       icon: Truck,
       color: 'bg-orange-100 text-orange-600',
       href: '/admin/dashboard/settings/steadfast'
+    },
+    {
+      id: 'roles',
+      title: 'Role Management',
+      description: 'RBAC & permissions',
+      icon: Shield,
+      color: 'bg-red-100 text-red-600',
+      href: '/admin/dashboard/settings/roles'
+    },
+    {
+      id: 'general',
+      title: 'General Settings',
+      description: 'Store configuration',
+      icon: SettingsIcon,
+      color: 'bg-indigo-100 text-indigo-600',
+      href: '/admin/dashboard/settings/backup'
     }
   ];
 

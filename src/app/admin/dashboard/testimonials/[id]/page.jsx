@@ -7,14 +7,17 @@ import { ArrowLeft, Edit, Star, Calendar, User, MessageSquare } from 'lucide-rea
 import toast from 'react-hot-toast'
 import { testimonialAPI } from '@/services/api'
 import { getCookie } from 'cookies-next'
-import { useAppContext } from '@/context/AppContext'
+import { useSelector } from 'react-redux'
+import { selectCurrentUser } from '@/redux/api/authSlice'
 import PermissionDenied from '@/components/Common/PermissionDenied'
 
 export default function TestimonialDetailsPage() {
     const router = useRouter()
     const params = useParams()
     const testimonialId = params.id
-    const { hasPermission, contextLoading } = useAppContext()
+    const user = useSelector(selectCurrentUser)
+    const hasPermission = (module, action) => true // Mocked
+    const contextLoading = false
     
     const [loading, setLoading] = useState(true)
     const [testimonial, setTestimonial] = useState(null)

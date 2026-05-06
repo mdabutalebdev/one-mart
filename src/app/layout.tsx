@@ -19,6 +19,8 @@ export const metadata: Metadata = {
   description: "A premium watch and accessories store",
 };
 
+import { ReduxProvider } from "@/redux/provider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,8 +31,13 @@ export default function RootLayout({
       lang="en"
       className={`${roboto.variable} ${montserrat.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-roboto text-foreground bg-background">
-        {children}
+      <body 
+        className="min-h-full flex flex-col font-roboto text-foreground bg-background"
+        suppressHydrationWarning
+      >
+        <ReduxProvider>
+          {children}
+        </ReduxProvider>
       </body>
     </html>
   );

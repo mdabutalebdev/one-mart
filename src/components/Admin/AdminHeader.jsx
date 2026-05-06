@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-//import { useAppContext } from '@/context/AppContext'
+
+import { useSelector, useDispatch } from 'react-redux'
+import { logout, selectCurrentUser } from '@/redux/api/authSlice'
 import {
     Search,
     Bell,
@@ -18,14 +20,13 @@ export default function AdminHeader({ onMobileMenuToggle }) {
     const [isSearchFocused, setIsSearchFocused] = useState(false)
     const [isProfileOpen, setIsProfileOpen] = useState(false)
     
-   // const { user, logout } = useAppContext()
-   const user = {name: 'Admin User', role: 'admin'}
-   const logout = () => {}
+    const user = useSelector(selectCurrentUser)
+    const dispatch = useDispatch()
     const router = useRouter()
     const profileDropdownRef = useRef(null)
 
     const handleLogout = () => {
-        logout()
+        dispatch(logout())
         router.push('/login')
     }
 

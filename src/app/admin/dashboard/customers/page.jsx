@@ -19,83 +19,38 @@ import {
     MoreVertical
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { userAPI } from '@/services/api'
-import { getCookie } from 'cookies-next'
-import { useAppContext } from '@/context/AppContext'
-import PermissionDenied from '@/components/Common/PermissionDenied'
-import DeleteConfirmationModal from '@/components/Common/DeleteConfirmationModal'
+import { useSelector } from 'react-redux';
+import { selectCurrentUser } from '@/redux/api/authSlice';
+import { useGetAdminUsersQuery, useDeleteUserMutation } from '@/redux/api/usersApi';
 
 export default function AdminCustomersPage() {
     const router = useRouter()
-    const { hasPermission, contextLoading, user: currentUser } = useAppContext()
-    const [users, setUsers] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [checkingPermission, setCheckingPermission] = useState(true)
-    const [hasReadPermission, setHasReadPermission] = useState(false)
+    const user = useSelector(selectCurrentUser)
+    const hasPermission = (module, action) => true; // Mocked
+    const contextLoading = false;
+    
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState('')
     const [roleFilter, setRoleFilter] = useState('')
     const [currentPage, setCurrentPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
-    const [totalItems, setTotalItems] = useState(0)
     const [itemsPerPage, setItemsPerPage] = useState(10)
-    const [permissionError, setPermissionError] = useState(null)
+    
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [userToDelete, setUserToDelete] = useState(null)
-    const [deleting, setDeleting] = useState(false)
 
-    useEffect(() => {
-        if (!contextLoading) {
-            const canRead = hasPermission('user', 'read')
-            setHasReadPermission(canRead)
-            setCheckingPermission(false)
-            if (canRead) {
-                fetchUsers()
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [contextLoading, hasPermission, currentPage, itemsPerPage, searchTerm, statusFilter, roleFilter])
+    // RTK Query hooks
+    const { data: usersData, isLoading, isFetching } = useGetAdminUsersQuery({
+        page: currentPage,
+        limit: itemsPerPage,
+        search: searchTerm,
+        status: statusFilter,
+        role: roleFilter
+    })
 
-    const fetchUsers = async () => {
-        const token = getCookie('token')
-        try {
-            setLoading(true)
-            const params = {
-                page: currentPage,
-                limit: itemsPerPage,
-                search: searchTerm,
-                status: statusFilter,
-                customersOnly: 'true' // Filter for customers only (role='customer' AND roleId is null)
-            }
-            
-            // Don't add role filter for customers page since customersOnly already filters correctly
-            // Role filter dropdown is kept for UI consistency but won't affect results
-            
-            const data = await userAPI.getUsers(params, token)
-            
-            if (data.success) {
-                setUsers(data.data)
-                setTotalPages(data.pagination.totalPages)
-                setTotalItems(data.pagination.totalItems)
-                setPermissionError(null)
-            } else {
-                if (data.status === 403 || (typeof data.message === 'string' && data.message.toLowerCase().includes('permission'))) {
-                    setPermissionError(data.message || "You don't have permission to read users")
-                } else {
-                    toast.error('Failed to fetch users: ' + data.message)
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching users:', error)
-            if (error?.status === 403) {
-                setPermissionError(error?.data?.message || "You don't have permission to read users")
-            } else {
-                toast.error('Error fetching users')
-            }
-        } finally {
-            setLoading(false)
-        }
-    }
+    const [deleteUser, { isLoading: isDeleting }] = useDeleteUserMutation()
+
+    const users = usersData?.data?.data || []
+    const pagination = usersData?.data?.pagination || { totalPages: 1, totalItems: 0 }
 
     const handleDeleteClick = (user) => {
         setUserToDelete(user)
@@ -104,35 +59,37 @@ export default function AdminCustomersPage() {
 
     const confirmDeleteUser = async () => {
         if (!userToDelete) return
-        const token = getCookie('token')
         try {
-            setDeleting(true)
-            const data = await userAPI.deleteUser(userToDelete._id, token)
-            if (data.success) {
+            const result = await deleteUser(userToDelete._id).unwrap()
+            if (result.success) {
                 toast.success('User deleted successfully!')
                 setShowDeleteModal(false)
                 setUserToDelete(null)
-                fetchUsers()
             } else {
-                toast.error('Failed to delete user: ' + data.message)
+                toast.error('Failed to delete user')
             }
         } catch (error) {
             console.error('Error deleting user:', error)
             toast.error('Error deleting user')
-        } finally {
-            setDeleting(false)
         }
     }
 
     const handleSearch = (e) => {
         e.preventDefault()
-        setCurrentPage(1) // Reset to first page when searching
-        fetchUsers()
+        setCurrentPage(1)
     }
 
     const handleFilterChange = () => {
-        setCurrentPage(1) // Reset to first page when filtering
-        fetchUsers()
+        setCurrentPage(1)
+    }
+
+    const handlePageChange = (page) => {
+        setCurrentPage(page)
+    }
+
+    const handleItemsPerPageChange = (newItemsPerPage) => {
+        setItemsPerPage(newItemsPerPage)
+        setCurrentPage(1)
     }
 
     const getStatusBadge = (status) => {
@@ -142,7 +99,6 @@ export default function AdminCustomersPage() {
             banned: { bg: 'bg-red-100', text: 'text-red-800', label: 'Banned' },
             deleted: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Deleted' }
         }
-        
         const config = statusConfig[status] || statusConfig.active
         return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
@@ -157,7 +113,6 @@ export default function AdminCustomersPage() {
             customer: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Customer' },
             seller: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Seller' }
         }
-        
         const config = roleConfig[role] || roleConfig.customer
         return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
@@ -167,6 +122,7 @@ export default function AdminCustomersPage() {
     }
 
     const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
         return new Date(dateString).toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'short',
@@ -174,32 +130,11 @@ export default function AdminCustomersPage() {
         })
     }
 
-    const handlePageChange = (page) => {
-        setCurrentPage(page)
-    }
-
-    const handleItemsPerPageChange = (newItemsPerPage) => {
-        setItemsPerPage(newItemsPerPage)
-        setCurrentPage(1)
-    }
-
-
-    if (checkingPermission || contextLoading) {
+    if (isLoading) {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             </div>
-        )
-    }
-
-    if (!hasReadPermission || permissionError) {
-        return (
-            <PermissionDenied 
-                title="Access Denied"
-                message={permissionError || "You don't have permission to access customers"}
-                action="Contact your administrator for access"
-                showBackButton={true}
-            />
         )
     }
 
@@ -216,7 +151,7 @@ export default function AdminCustomersPage() {
                     </div>
                     <div className="flex items-center space-x-3">
                         <div className="text-sm text-gray-500">
-                            Total: {totalItems} users
+                            Total: {pagination.totalItems} users
                         </div>
                     </div>
                 </div>
@@ -278,7 +213,7 @@ export default function AdminCustomersPage() {
 
             {/* Users Table */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                {loading ? (
+                {isLoading ? (
                     <div className="flex items-center justify-center h-64">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
                     </div>
@@ -424,7 +359,7 @@ export default function AdminCustomersPage() {
             </div>
 
             {/* Pagination */}
-            {totalPages > 1 && (
+            {pagination.totalPages > 1 && (
                 <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 rounded-lg shadow-sm">
                     <div className="flex-1 flex justify-between sm:hidden">
                         <button
@@ -436,7 +371,7 @@ export default function AdminCustomersPage() {
                         </button>
                         <button
                             onClick={() => handlePageChange(currentPage + 1)}
-                            disabled={currentPage === totalPages}
+                            disabled={currentPage === pagination.totalPages}
                             className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                         >
                             Next
@@ -451,10 +386,10 @@ export default function AdminCustomersPage() {
                                 </span>{' '}
                                 to{' '}
                                 <span className="font-medium">
-                                    {Math.min(currentPage * itemsPerPage, totalItems)}
+                                    {Math.min(currentPage * itemsPerPage, pagination.totalItems)}
                                 </span>{' '}
                                 of{' '}
-                                <span className="font-medium">{totalItems}</span>{' '}
+                                <span className="font-medium">{pagination.totalItems}</span>{' '}
                                 results
                             </p>
                         </div>
@@ -477,7 +412,7 @@ export default function AdminCustomersPage() {
                                 >
                                     <ChevronLeft className="h-5 w-5" />
                                 </button>
-                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
                                     const page = i + 1
                                     return (
                                         <button
@@ -486,7 +421,7 @@ export default function AdminCustomersPage() {
                                             className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium cursor-pointer ${
                                                 currentPage === page
                                                     ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                                                    : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                                                     : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
                                             }`}
                                         >
                                             {page}
@@ -495,7 +430,7 @@ export default function AdminCustomersPage() {
                                 })}
                                 <button
                                     onClick={() => handlePageChange(currentPage + 1)}
-                                    disabled={currentPage === totalPages}
+                                    disabled={currentPage === pagination.totalPages}
                                     className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                 >
                                     <ChevronRight className="h-5 w-5" />

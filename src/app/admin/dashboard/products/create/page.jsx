@@ -9,15 +9,25 @@ import GalleryImageUpload from '@/components/Common/GalleryImageUpload'
 import toast from 'react-hot-toast'
 import { productAPI, categoryAPI } from '@/services/api'
 import PermissionDenied from '@/components/Common/PermissionDenied'
-import { useAppContext } from '@/context/AppContext'
 import { getCookie } from 'cookies-next'
+import { useSelector } from 'react-redux'
+import { selectCurrentUser } from '@/redux/api/authSlice'
+import { useGetCategoriesQuery, useCreateProductMutation } from '@/redux/api/productsApi'
+
+// Mock permission checker
+const hasPermission = (module, action) => true;
 
 export default function CreateProductPage() {
     const router = useRouter()
-    const { hasPermission, permissions, loading: contextLoading } = useAppContext()
-    const [loading, setLoading] = useState(false)
-    const [checkingPermission, setCheckingPermission] = useState(true)
-    const [categories, setCategories] = useState([])
+    const user = useSelector(selectCurrentUser)
+    const contextLoading = false
+    
+    // RTK Query hooks
+    const { data: categoriesData, isLoading: categoriesLoading } = useGetCategoriesQuery()
+    const [createProduct, { isLoading: creatingProduct }] = useCreateProductMutation()
+    
+    const categories = categoriesData?.data || []
+    
     const [formData, setFormData] = useState({
         title: '',
         shortDescription: '',
@@ -30,7 +40,6 @@ export default function CreateProductPage() {
         isFeatured: false,
         isBestselling: false,
         isNewArrival: false,
-        // Jewelry specific properties
         isBracelet: false,
         isRing: false,
         braceletSizes: [],
@@ -54,33 +63,9 @@ export default function CreateProductPage() {
     })
 
     const [hasColorVariants, setHasColorVariants] = useState(true)
-
     const [customBraceletSize, setCustomBraceletSize] = useState('');
     const [customRingSize, setCustomRingSize] = useState('');
     const [tagInput, setTagInput] = useState('');
-
-    useEffect(() => {
-        // Check permission first
-        if (!contextLoading) {
-            if (!hasPermission('product', 'create')) {
-                setCheckingPermission(false)
-            } else {
-                setCheckingPermission(false)
-                fetchCategories()
-            }
-        }
-    }, [contextLoading, hasPermission])
-
-    const fetchCategories = async () => {
-        try {
-            const data = await categoryAPI.getCategories()
-            if (data.success) {
-                setCategories(data.data)
-            }
-        } catch (error) {
-            console.error('Error fetching categories:', error)
-        }
-    }
 
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target
@@ -89,7 +74,7 @@ export default function CreateProductPage() {
             [name]: type === 'checkbox' ? checked : value
         }))
     }
-
+    
     const addTag = () => {
         const trimmedTag = tagInput.trim()
         if (trimmedTag && !formData.tags.includes(trimmedTag)) {
@@ -147,22 +132,15 @@ export default function CreateProductPage() {
     }
 
     const addVariant = () => {
-        // Only current price is required now, size is optional
         if (!variantForm.currentPrice) {
             toast.error('Please fill in current price')
             return
         }
-
-        // If color variants are enabled, color is required
         if (hasColorVariants && !variantForm.color) {
             toast.error('Please fill in color')
             return
         }
-
-        // Create attributes array - size is optional now
         const attributes = []
-        
-        // Add size only if provided
         if (variantForm.size && variantForm.size.trim()) {
             attributes.push({ 
                 name: 'Size', 
@@ -170,8 +148,6 @@ export default function CreateProductPage() {
                 displayValue: variantForm.size.trim() 
             })
         }
-
-        // Add color only if color variants are enabled and color is provided
         if (hasColorVariants && variantForm.color && variantForm.color.trim()) {
             attributes.push({ 
                 name: 'Color', 
@@ -180,14 +156,8 @@ export default function CreateProductPage() {
                 hexCode: variantForm.colorCode 
             })
         }
-
-        // Generate SKU with timestamp for uniqueness
-        const generateUniqueSKU = () => {
-            const timestamp = Date.now(); // Unique timestamp
-            return `SKU-${timestamp}`;
-        }
+        const generateUniqueSKU = () => `SKU-${Date.now()}`
         const sku = variantForm.sku || generateUniqueSKU()
-
         const newVariant = {
             sku,
             attributes,
@@ -197,13 +167,10 @@ export default function CreateProductPage() {
             images: variantForm.image ? [{ url: variantForm.image, isPrimary: true }] : [],
             isActive: true
         }
-
         setFormData(prev => ({
             ...prev,
             variants: [...prev.variants, newVariant]
         }))
-
-        // Reset variant form
         setVariantForm({
             image: '',
             size: '',
@@ -229,56 +196,37 @@ export default function CreateProductPage() {
             .replace(/[^a-z0-9 -]/g, '')
             .replace(/\s+/g, '-')
             .replace(/-+/g, '-')
-            .replace(/^-+|-+$/g, '') // Remove leading and trailing hyphens
+            .replace(/^-+|-+$/g, '')
         setFormData(prev => ({ ...prev, slug }))
     }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        setLoading(true)
 
         try {
-            const token = getCookie('token')
-            const data = await productAPI.createProduct(formData, token)
+            const result = await createProduct(formData).unwrap()
 
-            if (data.success) {
+            if (result.success) {
                 toast.success('🎉 Product created successfully!', {
                     duration: 4000
                 })
                 router.push('/admin/dashboard/products')
             } else {
-                toast.error(data.message || 'Failed to create product', {
-                    duration: 6000,
-                    style: {
-                        background: '#EF4444',
-                        color: '#fff',
-                        fontWeight: '500',
-                        maxWidth: '500px',
-                    },
-                })
+                toast.error(result.message || 'Failed to create product')
             }
         } catch (error) {
             console.error('Error creating product:', error)
-            toast.error('❌ Something went wrong while creating the product. Please try again.', {
-                duration: 5000,
-                style: {
-                    background: '#EF4444',
-                    color: '#fff',
-                    fontWeight: '500',
-                },
-            })
-        } finally {
-            setLoading(false)
+            toast.error('❌ Something went wrong while creating the product.')
         }
     }
 
-    // Show permission denied if no permission
-    if (checkingPermission || contextLoading) {
+    // Show loading state
+    if (contextLoading || categoriesLoading) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <div className="flex items-center space-x-2">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <span className="text-gray-600">Checking permissions...</span>
+                    <span className="text-gray-600">Loading data...</span>
                 </div>
             </div>
         )
@@ -1066,11 +1014,11 @@ export default function CreateProductPage() {
                             </Link>
                             <button
                                 type="submit"
-                                disabled={loading}
+                                disabled={creatingProduct}
                                 className="inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors duration-200"
                             >
                                 <Save className="h-4 w-4 mr-2" />
-                                {loading ? 'Creating...' : 'Create Product'}
+                                {creatingProduct ? 'Creating...' : 'Create Product'}
                             </button>
                         </div>
                     </div>

@@ -31,17 +31,28 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatDateForTable } from '@/utils/formatDate';
-import { orderAPI, productAPI } from '@/services/api';
-import { getCookie } from 'cookies-next';
+import { 
+    useGetAdminOrderDetailsQuery, 
+    useUpdateOrderComprehensiveMutation 
+} from '@/redux/api/ordersApi';
+import { useGetAdminProductsQuery } from '@/redux/api/productsApi';
 
 export default function OrderEditPage() {
     const params = useParams();
     const router = useRouter();
     const orderId = params.id;
 
-    const [order, setOrder] = useState(null);
+    // RTK Query hooks
+    const { 
+        data: orderResponse, 
+        isLoading: orderLoading 
+    } = useGetAdminOrderDetailsQuery(orderId, { skip: !orderId });
+    
+    const { data: productsResponse } = useGetAdminProductsQuery({ limit: 100 });
+    const [updateOrder, { isLoading: saving }] = useUpdateOrderComprehensiveMutation();
+
+    const order = orderResponse?.data;
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
     const [products, setProducts] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [showProductSearch, setShowProductSearch] = useState(false);
@@ -65,7 +76,6 @@ export default function OrderEditPage() {
         loyaltyDiscount: 0,
         orderNotes: '',
         adminNotes: '',
-        // Update reasons
         itemUpdateReason: '',
         addressUpdateReason: '',
         priceUpdateReason: '',
@@ -76,62 +86,38 @@ export default function OrderEditPage() {
     });
 
     useEffect(() => {
-        fetchOrderDetails();
-        fetchProducts();
-    }, [orderId]);
-
-    const fetchOrderDetails = async () => {
-        try {
-            setLoading(true);
-            const data = await orderAPI.getAdminOrderDetails(orderId);
-
-            if (data.success) {
-                setOrder(data.data);
-                setFormData({
-                    items: data.data.items || [],
-                    shippingAddress: data.data.shippingAddress || {},
-                    billingAddress: data.data.billingAddress || {},
-                    status: data.data.status || '',
-                    paymentStatus: data.data.paymentStatus || '',
-                    paymentMethod: data.data.paymentMethod || '',
-                    total: data.data.total || 0,
-                    shippingCost: data.data.shippingCost || 0,
-                    discount: data.data.discount || 0,
-                    couponDiscount: data.data.couponDiscount || 0,
-                    loyaltyDiscount: data.data.loyaltyDiscount || 0,
-                    orderNotes: data.data.orderNotes || '',
-                    adminNotes: data.data.adminNotes || '',
-                    itemUpdateReason: '',
-                    addressUpdateReason: '',
-                    priceUpdateReason: '',
-                    statusUpdateReason: '',
-                    paymentUpdateReason: '',
-                    notesUpdateReason: '',
-                    adminNotesUpdateReason: ''
-                });
-            } else {
-                toast.error('Failed to fetch order details');
-                router.push('/admin/dashboard/orders');
-            }
-        } catch (error) {
-            console.error('Error fetching order details:', error);
-            toast.error('Error fetching order details');
-            router.push('/admin/dashboard/orders');
-        } finally {
+        if (order) {
+            setFormData({
+                items: order.items || [],
+                shippingAddress: order.shippingAddress || {},
+                billingAddress: order.billingAddress || {},
+                status: order.status || '',
+                paymentStatus: order.paymentStatus || '',
+                paymentMethod: order.paymentMethod || '',
+                total: order.total || 0,
+                shippingCost: order.shippingCost || 0,
+                discount: order.discount || 0,
+                couponDiscount: order.couponDiscount || 0,
+                loyaltyDiscount: order.loyaltyDiscount || 0,
+                orderNotes: order.orderNotes || '',
+                adminNotes: order.adminNotes || '',
+                itemUpdateReason: '',
+                addressUpdateReason: '',
+                priceUpdateReason: '',
+                statusUpdateReason: '',
+                paymentUpdateReason: '',
+                notesUpdateReason: '',
+                adminNotesUpdateReason: ''
+            });
             setLoading(false);
         }
-    };
+    }, [order]);
 
-    const fetchProducts = async () => {
-        try {
-            const data = await productAPI.getProducts({ limit: 100 });
-            if (data.success) {
-                setProducts(data.data);
-            }
-        } catch (error) {
-            console.error('Error fetching products:', error);
+    useEffect(() => {
+        if (productsResponse?.data) {
+            setProducts(productsResponse.data);
         }
-    };
+    }, [productsResponse]);
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -241,15 +227,12 @@ export default function OrderEditPage() {
 
     const handleSave = async () => {
         try {
-            setSaving(true);
-            const token = getCookie('token');
-
             const updateData = {
                 ...formData,
                 total: calculateTotal()
             };
 
-            const response = await orderAPI.updateOrderComprehensive(orderId, updateData, token, { overrideStatus: 'true' });
+            const response = await updateOrder({ id: orderId, data: updateData }).unwrap();
 
             if (response.success) {
                 toast.success('Order updated successfully');
@@ -260,8 +243,6 @@ export default function OrderEditPage() {
         } catch (error) {
             console.error('Error updating order:', error);
             toast.error('Error updating order');
-        } finally {
-            setSaving(false);
         }
     };
 
@@ -348,7 +329,7 @@ export default function OrderEditPage() {
                     <div className="bg-slate-100 rounded-lg p-4 mb-6">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-medium text-slate-600">Order ID:</span>
-                            <span className="text-sm font-bold text-slate-900">#{order._id.slice(-8).toUpperCase()}</span>
+                            <span className="text-sm font-bold text-slate-900">#{order?._id?.slice(-8)?.toUpperCase() || 'N/A'}</span>
                         </div>
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-medium text-slate-600">Status:</span>
@@ -356,7 +337,7 @@ export default function OrderEditPage() {
                                     ? 'bg-pink-100 text-pink-800 border-pink-200'
                                     : 'bg-red-100 text-red-800 border-red-200'
                                 }`}>
-                                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                {(order?.status?.charAt(0).toUpperCase() + order?.status?.slice(1)) || 'N/A'}
                             </span>
                         </div>
                         <div className="flex items-center justify-between">
@@ -403,7 +384,7 @@ export default function OrderEditPage() {
                             <div>
                                 <h1 className="text-xl font-bold text-slate-900 flex items-center">
                                     <Edit3 className="h-5 w-5 mr-2" />
-                                    Edit Order #{order._id.slice(-8).toUpperCase()}
+                                    Edit Order #{order?._id?.slice(-8)?.toUpperCase() || 'N/A'}
                                 </h1>
                                 <p className="text-sm text-slate-500">
                                     {formatDateForTable(order.createdAt)}

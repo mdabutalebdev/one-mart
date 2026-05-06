@@ -2,20 +2,35 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, Package, Check, X, Plus, Minus, Printer } from 'lucide-react';
-import { productAPI } from '@/services/api';
 import { toast } from 'react-hot-toast';
-import { useAppContext } from '@/context/AppContext';
 import PermissionDenied from '@/components/Common/PermissionDenied';
-import { getCookie } from 'cookies-next';
+
+import { useAppContext } from '@/context/AppContext';
+import { useSelector } from 'react-redux';
+import { selectCurrentUser } from '@/redux/api/authSlice';
+import { useGetAdminProductsQuery } from '@/redux/api/productsApi';
 
 export default function LabelPrintPage() {
+    const user = useSelector(selectCurrentUser);
     const { hasPermission, contextLoading } = useAppContext();
     const [checkingPermission, setCheckingPermission] = useState(true);
     const [hasReadPermission, setHasReadPermission] = useState(false);
+
+    useEffect(() => {
+        if (!contextLoading && checkingPermission) {
+            setHasReadPermission(hasPermission('settings', 'read'));
+            setCheckingPermission(false);
+        }
+    }, [contextLoading, checkingPermission]);
     
-    // Products state
-    const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // RTK Query hooks
+    const { data: productsData, isLoading: loading } = useGetAdminProductsQuery({
+        page: 1,
+        limit: 1000,
+        search: ''
+    });
+
+    const products = productsData?.data || [];
     const [searchTerm, setSearchTerm] = useState('');
     const [filteredProducts, setFilteredProducts] = useState([]);
     
@@ -33,22 +48,6 @@ export default function LabelPrintPage() {
     
     // Print functionality
     const [showPrintPreview, setShowPrintPreview] = useState(false);
-    
-    // Check permission on mount
-    useEffect(() => {
-        if (!contextLoading) {
-            const canRead = hasPermission('product', 'read');
-            setHasReadPermission(canRead);
-            setCheckingPermission(false);
-        }
-    }, [contextLoading, hasPermission]);
-
-    // Fetch products
-    useEffect(() => {
-        if (hasReadPermission) {
-            fetchProducts();
-        }
-    }, [hasReadPermission]);
 
     // Filter products based on search and handle SKU auto-select
     useEffect(() => {
@@ -116,52 +115,7 @@ export default function LabelPrintPage() {
         } else {
             setFilteredProducts(products);
         }
-    }, [searchTerm, products]); // Removed selectedVariants from dependencies to prevent infinite loop
-
-    const fetchProducts = async () => {
-        try {
-            setLoading(true);
-            const token = getCookie('token');
-            
-            // Remove status filter to get all products
-            const response = await productAPI.getAdminProducts({
-                page: 1,
-                limit: 1000, // Get all products for selection
-                search: ''
-                // Removed status filter - get all products
-            }, token);
-            
-            console.log('API Response:', response); // Debug log
-            
-            if (response.success && response.data) {
-                // Backend returns data as array directly (same as admin products page)
-                const productsArray = Array.isArray(response.data) 
-                    ? response.data 
-                    : [];
-                    
-                console.log('Products Array:', productsArray.length, productsArray); // Debug log
-                
-                setProducts(productsArray);
-                setFilteredProducts(productsArray);
-                
-                if (productsArray.length === 0) {
-                    toast.error('No products found');
-                }
-            } else {
-                console.error('API Response Error:', response);
-                toast.error(response.message || 'Failed to fetch products');
-                setProducts([]);
-                setFilteredProducts([]);
-            }
-        } catch (error) {
-            console.error('Error fetching products:', error);
-            toast.error('Error fetching products');
-            setProducts([]);
-            setFilteredProducts([]);
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [searchTerm, products]);
 
     const handleProductSelect = (product) => {
         setSelectedProduct(product);

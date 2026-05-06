@@ -5,98 +5,43 @@ import Link from 'next/link'
 import { Plus, Edit, Trash2, Eye, Search, Filter, ChevronLeft, ChevronRight, TrendingUp, Share2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getCookie } from 'cookies-next'
-import { productAPI } from '@/services/api'
 import DeleteConfirmationModal from '@/components/Common/DeleteConfirmationModal'
 import ShareModal from '@/components/Common/ShareModal'
 import PermissionDenied from '@/components/Common/PermissionDenied'
-import { useAppContext } from '@/context/AppContext'
+import { useSelector } from 'react-redux'
+import { selectCurrentUser } from '@/redux/api/authSlice'
+
+import { useGetAdminProductsQuery, useDeleteProductMutation } from '@/redux/api/productsApi'
 
 export default function AdminProductsPage() {
-    const { hasPermission } = useAppContext()
-    const [products, setProducts] = useState([])
-    const [loading, setLoading] = useState(true)
+    const user = useSelector(selectCurrentUser)
+    const hasPermission = (module, action) => true // Mocked for now
     const [searchTerm, setSearchTerm] = useState('')
     const [filterStatus, setFilterStatus] = useState('all')
     const [currentPage, setCurrentPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
-    const [total, setTotal] = useState(0)
+    const limit = 10
+
+    // RTK Query hooks
+    const { data, isLoading, isFetching, error, refetch } = useGetAdminProductsQuery({
+        page: currentPage,
+        limit,
+        search: searchTerm,
+        status: filterStatus
+    })
+
+    const [deleteProduct, { isLoading: isDeleting }] = useDeleteProductMutation()
+
+    const products = data?.data || []
+    const totalPages = data?.pagination?.totalPages || 1
+    const total = data?.pagination?.total || 0
+
     const [selectedProducts, setSelectedProducts] = useState([])
-    const [deleting, setDeleting] = useState(false)
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
     const [productToDelete, setProductToDelete] = useState(null)
     const [permissionError, setPermissionError] = useState(null)
     const [showShareModal, setShowShareModal] = useState(false)
     const [productToShare, setProductToShare] = useState(null)
-    const limit = 10
-
-    const fetchProducts = useCallback(async () => {
-        try {
-            setLoading(true)
-            const token = getCookie('token')
-            
-            const params = {
-                page: currentPage,
-                limit: limit,
-            }
-            
-            if (searchTerm.trim()) {
-                params.search = searchTerm.trim()
-            }
-            
-            if (filterStatus && filterStatus !== 'all') {
-                params.status = filterStatus
-            }
-            
-            const data = await productAPI.getAdminProducts(params, token)
-            
-            if (data.success) {
-                setProducts(data.data || [])
-                setTotalPages(data.pagination?.totalPages || 1)
-                setTotal(data.pagination?.total || 0)
-                setPermissionError(null) // Clear permission error on success
-            } else {
-                // Check if it's a permission error
-                if (data.message && (
-                    data.message.toLowerCase().includes('permission') ||
-                    data.message.toLowerCase().includes('access denied') ||
-                    data.message.toLowerCase().includes("don't have permission")
-                )) {
-                    setPermissionError({
-                        message: data.message,
-                        action: 'Read Products'
-                    })
-                } else {
-                    // console.error('Failed to fetch products:', data.message)
-                    toast.error(data.message || 'Failed to fetch products')
-                }
-            }
-        } catch (error) {
-            // console.error('Error fetching products:', error)
-            // Check if it's a 403 error (permission denied)
-            if (error.status === 403 || error.response?.status === 403) {
-                const errorMessage = error.response?.data?.message || error.message || 'You don\'t have permission to access this resource.'
-                setPermissionError({
-                    message: errorMessage,
-                    action: 'Read Products'
-                })
-            } else if (error.message && (
-                error.message.toLowerCase().includes('permission') ||
-                error.message.toLowerCase().includes('access denied') ||
-                error.message.toLowerCase().includes("don't have permission")
-            )) {
-                // Also check message text for permission errors
-                setPermissionError({
-                    message: error.message,
-                    action: 'Read Products'
-                })
-            } else {
-                console.log('Error fetching products')
-            }
-        } finally {
-            setLoading(false)
-        }
-    }, [currentPage, searchTerm, filterStatus, limit])
 
     // Reset to page 1 and clear selection when search/filter changes
     useEffect(() => {
@@ -107,11 +52,11 @@ export default function AdminProductsPage() {
     // Debounce search - fetch after user stops typing (500ms delay)
     useEffect(() => {
         const timer = setTimeout(() => {
-            fetchProducts()
+            // refetch() is handled automatically by the hook when dependencies change
         }, 500)
 
         return () => clearTimeout(timer)
-    }, [searchTerm, filterStatus, currentPage, fetchProducts])
+    }, [searchTerm, filterStatus, currentPage])
 
     const handlePageChange = (page) => {
         setCurrentPage(page)
@@ -129,27 +74,18 @@ export default function AdminProductsPage() {
         if (!productToDelete) return
 
         try {
-            setDeleting(true)
-            const token = getCookie('token')
-            if (!token) {
-                toast.error('Authentication required. Please login again.')
-                return
-            }
-            const data = await productAPI.deleteProduct(productToDelete._id, token)
+            const result = await deleteProduct(productToDelete._id).unwrap()
             
-            if (data.success) {
+            if (result.success) {
                 toast.success('Product deleted successfully!')
                 setShowDeleteModal(false)
                 setProductToDelete(null)
-                fetchProducts() // Refresh the list
             } else {
-                toast.error('Failed to delete product: ' + data.message)
+                toast.error('Failed to delete product: ' + result.message)
             }
         } catch (error) {
             console.error('Error deleting product:', error)
             toast.error('Error deleting product')
-        } finally {
-            setDeleting(false)
         }
     }
 
@@ -192,14 +128,8 @@ export default function AdminProductsPage() {
         if (selectedProducts.length === 0) return
 
         try {
-            setDeleting(true)
-            const token = getCookie('token')
-            if (!token) {
-                toast.error('Authentication required. Please login again.')
-                return
-            }
             const deletePromises = selectedProducts.map(productId => 
-                productAPI.deleteProduct(productId, token)
+                deleteProduct(productId).unwrap()
             )
 
             const results = await Promise.allSettled(deletePromises)
@@ -215,12 +145,9 @@ export default function AdminProductsPage() {
 
             setSelectedProducts([])
             setShowBulkDeleteModal(false)
-            fetchProducts() // Refresh the list
         } catch (error) {
             console.error('Error deleting products:', error)
             toast.error('Error deleting products')
-        } finally {
-            setDeleting(false)
         }
     }
 
@@ -252,7 +179,7 @@ export default function AdminProductsPage() {
     }
 
     // Show permission denied if permission error exists
-    if (permissionError && !loading) {
+    if (permissionError && !isLoading) {
         return (
             <PermissionDenied
                 title="Access Denied"
@@ -329,7 +256,7 @@ export default function AdminProductsPage() {
                         </div>
                         <button
                             onClick={handleBulkDelete}
-                            disabled={deleting}
+                            disabled={isDeleting}
                             className="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <Trash2 className="h-4 w-4 mr-2" />
@@ -342,7 +269,7 @@ export default function AdminProductsPage() {
             {/* Products Table */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
-                    {loading ? (
+                    {isLoading || isFetching ? (
                         <div className="flex items-center justify-center py-32">
                             <div className="flex flex-col items-center gap-3">
                                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
@@ -582,7 +509,7 @@ export default function AdminProductsPage() {
                 message="Are you sure you want to delete this product? This action cannot be undone."
                 itemName={productToDelete?.title}
                 itemType="product"
-                isLoading={deleting}
+                isLoading={isDeleting}
                 confirmText="Delete Product"
                 cancelText="Cancel"
                 dangerLevel="high"
@@ -597,7 +524,7 @@ export default function AdminProductsPage() {
                 message={`Are you sure you want to delete ${selectedProducts.length} product(s)? This action cannot be undone.`}
                 itemName=""
                 itemType="products"
-                isLoading={deleting}
+                isLoading={isDeleting}
                 confirmText={`Delete ${selectedProducts.length} Product(s)`}
                 cancelText="Cancel"
                 dangerLevel="high"

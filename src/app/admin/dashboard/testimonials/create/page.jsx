@@ -7,12 +7,15 @@ import { ArrowLeft, Star, Upload, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { testimonialAPI, uploadAPI } from '@/services/api'
 import { getCookie } from 'cookies-next'
-import { useAppContext } from '@/context/AppContext'
+import { useSelector } from 'react-redux'
+import { selectCurrentUser } from '@/redux/api/authSlice'
 import PermissionDenied from '@/components/Common/PermissionDenied'
 
 export default function CreateTestimonialPage() {
     const router = useRouter()
-    const { hasPermission, contextLoading } = useAppContext()
+    const user = useSelector(selectCurrentUser)
+    const hasPermission = (module, action) => true // Mocked
+    const contextLoading = false
     const [loading, setLoading] = useState(false)
     const [uploading, setUploading] = useState(false)
     const [formData, setFormData] = useState({

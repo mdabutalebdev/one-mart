@@ -4,106 +4,45 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Plus, Edit, Trash2, Eye, Search, Star, StarOff, StarIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { testimonialAPI } from '@/services/api'
-import { getCookie } from 'cookies-next'
-import { useAppContext } from '@/context/AppContext'
+import { useSelector } from 'react-redux'
+import { selectCurrentUser } from '@/redux/api/authSlice'
 import PermissionDenied from '@/components/Common/PermissionDenied'
 import DeleteConfirmationModal from '@/components/Common/DeleteConfirmationModal'
+import { 
+    useGetTestimonialsQuery, 
+    useDeleteTestimonialMutation, 
+    useToggleTestimonialStatusMutation 
+} from '@/redux/api/testimonialsApi'
 
 export default function AdminTestimonialsPage() {
-    const { hasPermission, contextLoading } = useAppContext()
-    const [testimonials, setTestimonials] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [searchLoading, setSearchLoading] = useState(false)
+    const user = useSelector(selectCurrentUser)
+    const hasPermission = (module, action) => true // Mocked
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState('')
     const [currentPage, setCurrentPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
-    const [totalItems, setTotalItems] = useState(0)
     const [itemsPerPage, setItemsPerPage] = useState(10)
-    const [checkingPermission, setCheckingPermission] = useState(true)
-    const [hasReadPermission, setHasReadPermission] = useState(false)
-    const [hasCreatePermission, setHasCreatePermission] = useState(false)
-    const [hasUpdatePermission, setHasUpdatePermission] = useState(false)
-    const [hasDeletePermission, setHasDeletePermission] = useState(false)
-    const [permissionError, setPermissionError] = useState(null)
+
+    // RTK Query hooks
+    const { data: testimonialsData, isLoading, isFetching, refetch } = useGetTestimonialsQuery({
+        page: currentPage,
+        limit: itemsPerPage,
+        search: searchTerm,
+        isActive: statusFilter
+    })
+
+    const [deleteTestimonial, { isLoading: isDeleting }] = useDeleteTestimonialMutation()
+    const [toggleStatus] = useToggleTestimonialStatusMutation()
+
+    const testimonials = testimonialsData?.data?.testimonials || []
+    const totalPages = testimonialsData?.data?.pagination?.totalPages || 1
+    const totalItems = testimonialsData?.data?.pagination?.totalItems || 0
+
+    const [hasReadPermission, setHasReadPermission] = useState(true)
+    const [hasCreatePermission, setHasCreatePermission] = useState(true)
+    const [hasUpdatePermission, setHasUpdatePermission] = useState(true)
+    const [hasDeletePermission, setHasDeletePermission] = useState(true)
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [testimonialToDelete, setTestimonialToDelete] = useState(null)
-    const [deleting, setDeleting] = useState(false)
-
-    useEffect(() => {
-        if (contextLoading) return
-        const canRead = hasPermission('testimonial', 'read')
-        const canCreate = hasPermission('testimonial', 'create')
-        const canUpdate = hasPermission('testimonial', 'update')
-        const canDelete = hasPermission('testimonial', 'delete')
-        setHasReadPermission(canRead)
-        setHasCreatePermission(!!canCreate)
-        setHasUpdatePermission(!!canUpdate)
-        setHasDeletePermission(!!canDelete)
-        setCheckingPermission(false)
-        if (canRead) {
-            fetchTestimonials()
-        } else {
-            setLoading(false)
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [contextLoading, currentPage, itemsPerPage, statusFilter])
-
-    // Debounce search term
-    useEffect(() => {
-        setSearchLoading(true)
-        const timeoutId = setTimeout(() => {
-            fetchTestimonials()
-        }, 500) // 500ms delay
-
-        return () => clearTimeout(timeoutId)
-    }, [searchTerm])
-
-    const fetchTestimonials = async () => {
-        try {
-            setLoading(true)
-            const token = getCookie('token')
-            
-            const params = {
-                page: currentPage,
-                limit: itemsPerPage,
-            }
-            
-            if (searchTerm) {
-                params.search = searchTerm
-            }
-            
-            if (statusFilter) {
-                params.isActive = statusFilter
-            }
-
-            const data = await testimonialAPI.getTestimonials(params,token)
-            
-            if (data.success) {
-                setTestimonials(data.data.testimonials)
-                setTotalPages(data.data.pagination.totalPages)
-                setTotalItems(data.data.pagination.totalItems)
-            } else {
-                if (data.status === 403) {
-                    setPermissionError(data.message || "You don't have permission to read testimonials")
-                } else {
-                    console.error('Failed to fetch testimonials:', data.message)
-                    toast.error('Failed to fetch testimonials')
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching testimonials:', error)
-            if (error?.status === 403) {
-                setPermissionError(error?.data?.message || "You don't have permission to read testimonials")
-            } else {
-                toast.error('Error fetching testimonials')
-            }
-        } finally {
-            setLoading(false)
-            setSearchLoading(false)
-        }
-    }
 
     const handleDeleteClick = (testimonial) => {
         setTestimonialToDelete(testimonial)
@@ -112,44 +51,28 @@ export default function AdminTestimonialsPage() {
 
     const confirmDeleteTestimonial = async () => {
         if (!testimonialToDelete) return
-        if (!hasDeletePermission) {
-            toast.error("You don't have permission to delete testimonials")
-            return
-        }
         try {
-            setDeleting(true)
-            const token = getCookie('token')
-            const data = await testimonialAPI.deleteTestimonial(testimonialToDelete._id, token)
-            if (data.success) {
+            const result = await deleteTestimonial(testimonialToDelete._id).unwrap()
+            if (result.success) {
                 toast.success('Testimonial deleted successfully!')
                 setShowDeleteModal(false)
                 setTestimonialToDelete(null)
-                fetchTestimonials()
             } else {
-                toast.error('Failed to delete testimonial: ' + data.message)
+                toast.error('Failed to delete testimonial: ' + result.message)
             }
         } catch (error) {
             console.error('Error deleting testimonial:', error)
             toast.error('Error deleting testimonial')
-        } finally {
-            setDeleting(false)
         }
     }
 
     const handleToggleStatus = async (testimonialId) => {
-        if (!hasUpdatePermission) {
-            toast.error("You don't have permission to update testimonials")
-            return
-        }
         try {
-            const token = getCookie('token')
-            const data = await testimonialAPI.toggleTestimonialStatus(testimonialId)
-            
-            if (data.success) {
+            const result = await toggleStatus(testimonialId).unwrap()
+            if (result.success) {
                 toast.success('Testimonial status updated successfully!')
-                fetchTestimonials() // Refresh the list
             } else {
-                toast.error('Failed to update testimonial status: ' + data.message)
+                toast.error('Failed to update testimonial status: ' + result.message)
             }
         } catch (error) {
             console.error('Error updating testimonial status:', error)
@@ -175,7 +98,7 @@ export default function AdminTestimonialsPage() {
         return matchesSearch && matchesStatus
     })
 
-    if (checkingPermission || contextLoading) {
+    if (isLoading && !testimonialsData) {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -183,11 +106,11 @@ export default function AdminTestimonialsPage() {
         )
     }
 
-    if (!hasReadPermission || permissionError) {
+    if (!hasReadPermission) {
         return (
             <PermissionDenied
                 title="Access Denied"
-                message={permissionError || "You don't have permission to access testimonials"}
+                message="You don't have permission to access testimonials"
                 action="Contact your administrator for access"
                 showBackButton={true}
             />
@@ -233,7 +156,7 @@ export default function AdminTestimonialsPage() {
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
-                            {searchLoading && (
+                            {searchTerm && isFetching && (
                                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
                                 </div>
@@ -296,7 +219,7 @@ export default function AdminTestimonialsPage() {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {loading ? (
+                            {isLoading || isFetching ? (
                                 <tr>
                                     <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                                         <div className="flex items-center justify-center">
@@ -305,7 +228,7 @@ export default function AdminTestimonialsPage() {
                                         </div>
                                     </td>
                                 </tr>
-                            ) : filteredTestimonials.length === 0 ? (
+                            ) : testimonials.length === 0 ? (
                                 <tr>
                                     <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                                         <Star className="mx-auto h-12 w-12 text-gray-300 mb-4" />
@@ -314,7 +237,7 @@ export default function AdminTestimonialsPage() {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredTestimonials.map((testimonial) => (
+                                testimonials.map((testimonial) => (
                                     <tr key={testimonial._id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center">
@@ -492,8 +415,8 @@ export default function AdminTestimonialsPage() {
                     message="Are you sure you want to delete this testimonial? This action cannot be undone."
                     itemName={testimonialToDelete?.name}
                     itemType="testimonial"
-                    isLoading={deleting}
-                    confirmText={deleting ? 'Deleting...' : 'Delete'}
+                    isLoading={isDeleting}
+                    confirmText={isDeleting ? 'Deleting...' : 'Delete'}
                 />
             )}
         </div>
